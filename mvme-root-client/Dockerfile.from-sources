@@ -1,0 +1,50 @@
+# syntax=docker/dockerfile:1.5
+# vim:ft=dockerfile
+
+# Author: f.lueke@mesytec.com
+
+# This Dockerfile uses an official root image as the base to start from. The mvme source
+# code is then cloned from github and mvme is built, including the mvme_root_client which
+# is used as the entrypoint in the final image.
+
+# Building the image:
+#   docker build -f Dockerfile.using-binaries --progress plain -t mvme-root-client:latest .
+
+# Running mvme_root_client to process mvme listmode data:
+#   mkdir output
+#   docker run --rm -it --network=host -v ./output:/home/ubuntu/output  mvme-root-client:latest
+
+# After starting mvme on the host machine make sure the "Event Server" is
+# enabled under "Workspace Settings". mvme_root_client should now be able to
+# connect to the running mvme process and receive readout data. All output
+# produced by mvme_root_client (generated source code, compiled object files,
+# output ROOT files) is placed in the ./output directory.
+
+FROM rootproject/root:latest as build
+
+ENV DEBIAN_FRONTEND="noninteractive"
+ENV TZ="Etc/UTC"
+ENV MVME=/home/ubuntu/mvme
+#ENV QT_QPA_PLATFORM=minimal
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    bash build-essential git cmake ninja-build ca-certificates \
+    qtbase5-dev qtbase5-dev-tools libqt5websockets5-dev libqt5opengl5-dev libqt5svg5-dev \
+    libqt5serialport5-dev libqwt-qt5-dev libquazip5-dev libusb-dev zlib1g-dev libgraphviz-dev \
+    libboost-dev sphinx-common sphinx-rtd-theme-common python3-sphinx python3-sphinxcontrib.qthelp \
+    texlive-latex-base texlive-latex-extra texlive-latex-recommended latexmk texlive-fonts-recommended \
+    prometheus-cpp-dev libzmq3-dev cppzmq-dev
+
+USER ubuntu
+WORKDIR /home/ubuntu/sources/
+RUN git clone --recurse-submodules https://github.com/flueke/mvme
+
+WORKDIR /home/ubuntu/build-mvme
+RUN cmake -GNinja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=${MVME} \
+    /home/ubuntu/sources/mvme && ninja && ctest . && ninja install
+RUN make -j4 -C ${MVME}/share/mvme_root_client install
+
+#RUN mkdir -p /home/ubuntu/output
+WORKDIR /home/ubuntu/output
+#VOLUME /home/ubuntu/output
+ENTRYPOINT ["/home/ubuntu/mvme/bin/mvme_root_client"]
