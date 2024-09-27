@@ -8,11 +8,11 @@
 # is used as the entrypoint in the final image.
 
 # Building the image:
-#   docker build -f Dockerfile.using-binaries --progress plain -t mvme-root-client:latest .
+#   docker build -f Dockerfile.from-sources --progress plain -t mvme-root-client:latest .
 
 # Running mvme_root_client to process mvme listmode data:
 #   mkdir output
-#   docker run --rm -it --network=host -v ./output:/home/ubuntu/output  mvme-root-client:latest
+#   docker run --rm -it --network=host -v ./output:/output  mvme-root-client:latest
 
 # After starting mvme on the host machine make sure the "Event Server" is
 # enabled under "Workspace Settings". mvme_root_client should now be able to
@@ -24,8 +24,6 @@ FROM rootproject/root:latest as build
 
 ENV DEBIAN_FRONTEND="noninteractive"
 ENV TZ="Etc/UTC"
-ENV MVME=/home/ubuntu/mvme
-#ENV QT_QPA_PLATFORM=minimal
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     bash build-essential git cmake ninja-build ca-certificates \
@@ -35,16 +33,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     texlive-latex-base texlive-latex-extra texlive-latex-recommended latexmk texlive-fonts-recommended \
     prometheus-cpp-dev libzmq3-dev cppzmq-dev
 
-USER ubuntu
-WORKDIR /home/ubuntu/sources/
+WORKDIR /sources
 RUN git clone --recurse-submodules https://github.com/flueke/mvme
 
-WORKDIR /home/ubuntu/build-mvme
-RUN cmake -GNinja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=${MVME} \
-    /home/ubuntu/sources/mvme && ninja && ctest . && ninja install
-RUN make -j4 -C ${MVME}/share/mvme_root_client install
+WORKDIR /mvme-build
+RUN cmake -GNinja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/mvme-install \
+    /sources/mvme && ninja && ctest . && ninja install
+ENV MVME=/mvme-install
+RUN make -j4 -C /mvme-install/share/mvme_root_client install
 
-#RUN mkdir -p /home/ubuntu/output
-WORKDIR /home/ubuntu/output
-#VOLUME /home/ubuntu/output
-ENTRYPOINT ["/home/ubuntu/mvme/bin/mvme_root_client"]
+WORKDIR /output
+ENTRYPOINT ["/mvme-install/bin/mvme_root_client"]
